@@ -16,10 +16,7 @@ export function ItemDetails({ item }: ItemDetailsProps) {
         </div>
         <div>
           <h3 className="text-sm font-medium text-gray-500">Rarity</h3>
-          <p className="flex items-center">
-            <span className={`inline-block w-3 h-3 rounded-full mr-2 ${getRarityColor(item.rarity)}`}></span>
-            {item.rarity}
-          </p>
+          
         </div>
         <div>
           <h3 className="text-sm font-medium text-gray-500">Power Level</h3>
@@ -51,19 +48,4 @@ export function ItemDetails({ item }: ItemDetailsProps) {
   )
 }
 
-function getRarityColor(rarity: string): string {
-  switch (rarity.toLowerCase()) {
-    case "common":
-      return "bg-gray-400"
-    case "uncommon":
-      return "bg-green-500"
-    case "rare":
-      return "bg-blue-500"
-    case "epic":
-      return "bg-purple-500"
-    case "legendary":
-      return "bg-yellow-500"
-    default:
-      return "bg-gray-400"
-  }
-}
+
