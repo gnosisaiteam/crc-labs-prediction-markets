@@ -126,8 +126,6 @@ export default function Home() {
             <li>Open the Metri app, click on Wallet, then Send, then click on the QR code logo.</li>
             <li>Scan the QR code of the outcome you want to wager on.</li>
             <li>Send an amount of Circles you want to bet.</li>
-            <li><i>Note that you need to trust the <a href="https://gnosisscan.io/address/0x86533d1ada8ffbe7b6f7244f9a1b707f7f3e239b" target="_blank" rel="noopener noreferrer" className="underline text-blue-500">Metri core group</a> first.</i></li>
-            
           </ul>
       </header>
 
