@@ -17,9 +17,10 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
 
   useEffect(() => {
     const fetchMarketData = async () => {
+      console.log('market_info', marketInfo.fpmmAddress);
       const query = `
         {
-          fixedProductMarketMaker(id: "0x47b8127185e5deb9be81dd30ed05cb64635e937b") {
+          fixedProductMarketMaker(id: "${marketInfo.fpmmAddress.toLowerCase()}") {
             id
             outcomes
             title
@@ -103,8 +104,15 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
                 {marketInfo.betContracts.map((contract, index) => (
                   <div key={index} className="bg-slate-100 p-4 rounded flex flex-col items-center">
-                    <span className="text-sm text-gray-500 mb-2">Place bet on outcome {marketData?.outcomes[index]}</span>
-                    <QRCode value={contract} size={180} />
+                    <a
+  href={`https://app.metri.xyz/transfer/${contract}/crc`}
+  target="_blank"
+  rel="noopener noreferrer"
+  className="inline-flex items-center text-white hover:text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-md text-sm transition-colors mb-2"
+>
+  Place bet on outcome {marketData?.outcomes[index]}
+</a>
+<QRCode value={contract} size={180} />
                     <span className="font-mono text-xs mt-3 break-all text-center">{contract}</span>
                   </div>
                 ))}
