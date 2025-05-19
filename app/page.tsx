@@ -51,7 +51,7 @@ export default function Home() {
   // Create a public client for Gnosis chain
   const client = createPublicClient({
     chain: gnosis,
-    transport: http("http://localhost:8545"),
+    transport: http(),
   })
 
   // Fetch the list of market addresses
