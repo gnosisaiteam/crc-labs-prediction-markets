@@ -9,7 +9,7 @@ import { LoadingSpinner } from "@/components/loading-spinner"
 import type { MarketInfo } from "@/lib/types"
 
 // Contract address
-const CONTRACT_ADDRESS = "0x88099415f14FE6845B2265aD7F1DEC0D11282e38"
+const CONTRACT_ADDRESS = "0xf671142603addba312ed8fbfd39c0890c7a46e54"
 
 // ABI for the contract functions we need
 const CONTRACT_ABI = [
