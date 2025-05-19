@@ -9,7 +9,7 @@ import { LoadingSpinner } from "@/components/loading-spinner"
 import type { MarketInfo } from "@/lib/types"
 
 // Contract address
-const CONTRACT_ADDRESS = "0xf671142603addba312ed8fbfd39c0890c7a46e54"
+const CONTRACT_ADDRESS = "0x62a3Cf54A77189A6680Ec0368432f72D73a87440"
 
 // ABI for the contract functions we need
 const CONTRACT_ABI = [
@@ -51,7 +51,7 @@ export default function Home() {
   // Create a public client for Gnosis chain
   const client = createPublicClient({
     chain: gnosis,
-    transport: http(),
+    transport: http("http://localhost:8545"),
   })
 
   // Fetch the list of market addresses

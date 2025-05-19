@@ -6,6 +6,8 @@ interface MarketDetailsProps {
   marketInfo: MarketInfo
 }
 
+// ToDo - show how many outcome tokens you get back
+
 export function MarketDetails({ marketInfo }: MarketDetailsProps) {
   interface FetchedMarketData {
     id: string;
