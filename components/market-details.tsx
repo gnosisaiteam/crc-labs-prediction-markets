@@ -1,6 +1,9 @@
 import type { MarketInfo } from "@/lib/types"
 import { QRCode } from "@/components/qr-code"
 import { useState, useEffect } from "react"
+import { createPublicClient, http } from 'viem'
+import { gnosis, mainnet } from 'viem/chains'
+import { BET_CONTRACT_ABI } from "@/lib/constants"
 
 interface MarketDetailsProps {
   marketInfo: MarketInfo
@@ -13,9 +16,18 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
     id: string;
     outcomes: string[];
     title: string;
+    outcomeTokenAmounts?: string[];
+  }
+
+  interface ProfileData {
+    name?: string;
+    previewImageUrl?: string;
+    address: string;
   }
 
   const [marketData, setMarketData] = useState<FetchedMarketData | null>(null);
+  const [bettorsByContract, setBettorsByContract] = useState<{[key: string]: string[]}>({});
+  const [profiles, setProfiles] = useState<{[address: string]: ProfileData}>({});
 
   useEffect(() => {
     const fetchMarketData = async () => {
@@ -26,6 +38,7 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
             id
             outcomes
             title
+            outcomeTokenAmounts
           }
         }
       `;
@@ -47,6 +60,79 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
 
     fetchMarketData();
   }, []);
+
+  const publicClient = createPublicClient({
+    chain: gnosis,
+    transport: http("http://localhost:8545")
+  });
+
+  const fetchProfile = async (address: string): Promise<ProfileData | null> => {
+    try {
+      // Check if we already have the profile
+      if (profiles[address]) return profiles[address];
+      
+      // Fetch profile data
+      const profileResponse = await fetch(`https://rpc.aboutcircles.com/profiles/search?address=${address}`);
+      const profileData = await profileResponse.json();
+      
+      if (!profileData || profileData.length === 0) return null;
+      
+      const profile = profileData[0];
+      if (!profile.CID) return null;
+      
+      // Fetch IPFS data
+      const ipfsResponse = await fetch(`https://ipfs.io/ipfs/${profile.CID}`);
+      const ipfsData = await ipfsResponse.json();
+      
+      const profileInfo: ProfileData = {
+        name: profile.name,
+        previewImageUrl: ipfsData.previewImageUrl,
+        address: address
+      };
+      
+      // Update profiles state
+      setProfiles(prev => ({
+        ...prev,
+        [address]: profileInfo
+      }));
+      
+      return profileInfo;
+    } catch (error) {
+      console.error(`Error fetching profile for ${address}:`, error);
+      return null;
+    }
+  };
+
+  const fetchBettors = async (contractAddress: string) => {
+    try {
+      const data = await publicClient.readContract({
+        address: contractAddress as `0x${string}`,
+        abi: BET_CONTRACT_ABI,
+        functionName: 'getAddressesWithBalanceGreaterThan0',
+      }) as `0x${string}`[];
+      
+      if (data) {
+        setBettorsByContract(prev => ({
+          ...prev,
+          [contractAddress]: data
+        }));
+        
+        // Fetch profiles for all addresses
+        await Promise.all(data.map(addr => fetchProfile(addr)));
+      }
+    } catch (error) {
+      console.error(`Error fetching bettors for contract ${contractAddress}:`, error);
+    }
+  };
+
+  useEffect(() => {
+    // Fetch bettors for each contract when marketInfo changes
+    marketInfo.betContracts.forEach(contract => {
+      if (contract) {
+        fetchBettors(contract);
+      }
+    });
+  }, [marketInfo.betContracts]);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -89,7 +175,23 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
         </div>
         <div>
         <h3 className="text-sm font-medium text-gray-500">Outcomes</h3>
-        <div className="font-mono text-sm bg-slate-100 p-2 rounded mt-1 break-all">{marketData.outcomes.map((outcome, index) => `${index}: ${outcome}`).join(", ")}</div>
+        <div className="space-y-2 mt-1">
+          {marketData.outcomes.map((outcome, index) => {
+            const totalTokens = marketData.outcomeTokenAmounts?.reduce((sum, amount) => sum + parseFloat(amount), 0) || 0;
+            const probability = marketData.outcomeTokenAmounts && totalTokens > 0 
+              ? (1 - (parseFloat(marketData.outcomeTokenAmounts[index]) / totalTokens)).toFixed(4)
+              : 'N/A';
+              
+            return (
+              <div key={index} className="bg-slate-100 p-2 rounded">
+                <div className="font-mono text-sm">{index}: {outcome}</div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Probability: {(parseFloat(probability) * 100).toFixed(1)}%
+                </div>
+              </div>
+            );
+          })}
+        </div>
         <div>
           <h3 className="text-sm font-medium text-gray-500">Group CRC Token</h3>
           <div className="font-mono text-sm bg-slate-100 p-2 rounded mt-1 break-all">{marketInfo.groupCRCToken}</div>
@@ -116,6 +218,38 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
 </a>
 <QRCode value={contract} size={180} />
                     <span className="font-mono text-xs mt-3 break-all text-center">{contract}</span>
+                    <div className="mt-2 w-full">
+                      <h4 className="text-sm font-medium text-gray-600 mt-2">Bettors:</h4>
+                      <div className="max-h-32 overflow-y-auto mt-1 bg-white p-2 rounded border border-gray-200">
+                        {bettorsByContract[contract]?.length > 0 ? (
+                          <ul className="space-y-1">
+                            {bettorsByContract[contract].map((address, idx) => {
+                              const profile = profiles[address];
+                              return (
+                                <li key={idx} className="flex items-center space-x-2 py-1">
+                                  {profile?.previewImageUrl ? (
+                                    <img 
+                                      src={profile.previewImageUrl} 
+                                      alt={profile.name || 'Profile'} 
+                                      className="w-6 h-6 rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center">
+                                      <span className="text-xs">{address.slice(2, 4)}</span>
+                                    </div>
+                                  )}
+                                  <span className="font-mono text-xs break-all">
+                                    {profile?.name || address}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-gray-500">No bettors yet</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

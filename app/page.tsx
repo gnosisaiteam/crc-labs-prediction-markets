@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { createPublicClient, http } from "viem"
 import { gnosis } from "viem/chains"
 import { ItemList } from "@/components/item-list"
@@ -115,10 +116,15 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col">
-      <header className="bg-slate-800 text-white p-2 shadow">
-        <h1 className="text-xl font-semibold">Prediction Markets with Circles</h1>
-        This application allows users to explore prediction markets using Circles tokens.
-        <p className="mt-2 text-sm">Explore the following steps:</p>
+      <header className="bg-slate-800 text-white p-4 shadow">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-semibold">Prediction Markets with Circles</h1>
+            <p>This application allows users to explore and create prediction markets using Circles tokens.</p>
+          </div>
+          
+        </div>
+        <p className="mt-4 text-sm">Explore the following steps:</p>
           <ul className="list-disc pl-6 mt-2 text-sm">
             <li>
               Pick a market from the list on the left.
