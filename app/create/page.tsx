@@ -6,7 +6,7 @@ import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTra
 import { WalletConnectButton } from "@/components/wallet-connect-button"
 import { useAskQuestion } from "@/hooks/useRealitio"
 import { CONDITIONAL_TOKENS_ABI, CONDITIONAL_TOKENS_ADDRESS } from "@/lib/contracts/conditionalTokens"
-import { ERC20_ABI, CRC_TOKEN_ADDRESS } from "@/lib/contracts/erc20"
+import { ERC20_ABI, CRC_WRAPPED_ERC20_TOKEN_ADDRESS } from "@/lib/contracts/erc20"
 
 const FPMM_DETERMINISTIC_FACTORY_ADDRESS = '0x9083A2B699c0a4AD06F63580BDE2635d26a3eeF0' as `0x${string}`
 const FPMM_DETERMINISTIC_FACTORY_ABI = [
@@ -125,7 +125,7 @@ export default function CreateMarket() {
     
   // Get current allowance
   const { data: allowanceData, refetch: refetchAllowance } = useSimulateContract({
-    address: CRC_TOKEN_ADDRESS,
+    address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'allowance',
     args: [address || '0x0', CONDITIONAL_TOKENS_ADDRESS] as const,
@@ -152,7 +152,7 @@ export default function CreateMarket() {
       const approvalAmount = (amount * 101n) / 100n // 1% more than needed
       
       const hash = await writeContract({
-        address: CRC_TOKEN_ADDRESS,
+        address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [CONDITIONAL_TOKENS_ADDRESS, approvalAmount],
@@ -391,9 +391,10 @@ export default function CreateMarket() {
       const feeBasisPoints = Math.round(parseFloat(formData.feePercentage) * 100)
       
       // Calculate distribution hint (equal distribution for now)
-      const distributionHint = Array(formData.outcomes.length).fill(
-        (BigInt(1e18) * BigInt(100)) / BigInt(formData.outcomes.length)
-      )
+      const distributionHint = [] as BigInt[];
+      // const distributionHint = Array(formData.outcomes.length).fill(
+      //   (BigInt(1e18) * BigInt(100)) / BigInt(formData.outcomes.length)
+      // )
       
       // Get the condition ID first
       const conditionId = await getConditionId(questionId!)
@@ -406,7 +407,7 @@ export default function CreateMarket() {
         args: [
           saltNonce,
           CONDITIONAL_TOKENS_ADDRESS,
-          CRC_TOKEN_ADDRESS,
+          CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
           [conditionId],
           BigInt(feeBasisPoints),
           parseEther(formData.initialFunds),
@@ -437,7 +438,7 @@ export default function CreateMarket() {
         creator: address || '',
         fixedProductMarketMaker: marketAddress,
         conditionalTokens: CONDITIONAL_TOKENS_ADDRESS,
-        collateralToken: CRC_TOKEN_ADDRESS,
+        collateralToken: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
         conditionIds: [conditionId],
         fee: feeBasisPoints.toString()
       })

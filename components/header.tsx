@@ -32,6 +32,16 @@ export function Header() {
           >
             Create Market
           </Link>
+          <Link 
+            href="/liquidity" 
+            className={`px-3 py-2 text-sm font-medium ${
+              isActive('/liquidity') 
+                ? 'text-blue-600 border-b-2 border-blue-600' 
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Liquidity
+          </Link>
         </div>
       </nav>
     </header>
