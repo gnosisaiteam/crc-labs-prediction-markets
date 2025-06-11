@@ -1,10 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
+import { useAccount } from 'wagmi'
 import { ItemList } from "@/components/item-list"
 import { MarketDetails } from "@/components/market-details"
 import { LoadingSpinner } from "@/components/loading-spinner"
+import { WalletConnectButton } from "@/components/wallet-connect-button"
 import type { MarketInfo } from "@/lib/types"
+import { GROUP_ERC20_CRC_TOKEN } from "@/lib/wagmi/config"
 
 // GraphQL endpoint for fetching markets
 const GRAPHQL_ENDPOINT = `https://gateway-arbitrum.network.thegraph.com/api/${process.env.NEXT_PUBLIC_GRAPH_API_KEY}/subgraphs/id/9fUVQpFwzpdWS9bq5WkAnmKbNNcoBwatMR4yZq81pbbz`;
@@ -32,25 +36,30 @@ export default function LiquidityPage() {
         setIsLoading(true)
         setError(null)
 
+        const query = `
+          query GetMarkets($collateralToken: String!) {
+            fixedProductMarketMakers(where: { collateralToken: $collateralToken }) {
+              id
+              title
+              collateralToken
+              outcomeTokenAmounts
+              outcomes
+              answerFinalizedTimestamp
+              resolutionTimestamp
+            }
+          }
+        `
+
         const response = await fetch(GRAPHQL_ENDPOINT, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            query: `{
-              fixedProductMarketMakers(
-                where: { collateralToken: "0x7147a7405fcfe5cfa30c6d5363f9f357a317d082" }
-              ) {
-                id
-                title
-                collateralToken
-                outcomeTokenAmounts
-                outcomes
-                answerFinalizedTimestamp
-                resolutionTimestamp
-              }
-            }`
+            query,
+            variables: {
+              collateralToken: GROUP_ERC20_CRC_TOKEN.toLowerCase()
+            }
           })
         })
 
@@ -59,8 +68,13 @@ export default function LiquidityPage() {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
 
-        const { data } = await response.json()
-        setMarkets(data.fixedProductMarketMakers || [])
+        const result = await response.json()
+        
+        if (result.errors) {
+          throw new Error(result.errors[0].message || 'Error fetching markets')
+        }
+        
+        setMarkets(result.data?.fixedProductMarketMakers || [])
 
 
       } catch (err) {
@@ -74,10 +88,15 @@ export default function LiquidityPage() {
     fetchMarkets()
   }, [])
 
+  const { isConnected } = useAccount()
+
   return (
     <main className="container mx-auto py-6 px-4">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6">Markets</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Markets</h1>
+          <WalletConnectButton />
+        </div>
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
             <LoadingSpinner />

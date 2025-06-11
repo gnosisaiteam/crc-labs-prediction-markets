@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSimulateContract, useWatchContractEvent } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSimulateContract, useWatchContractEvent, useReadContract } from 'wagmi'
 import { WalletConnectButton } from "@/components/wallet-connect-button"
 import { useAskQuestion } from "@/hooks/useRealitio"
 import { CONDITIONAL_TOKENS_ABI, CONDITIONAL_TOKENS_ADDRESS } from "@/lib/contracts/conditionalTokens"
@@ -39,9 +39,12 @@ const FPMM_DETERMINISTIC_FACTORY_ABI = [
     "type": "event"
   }
 ] as const
-import { parseEther } from 'viem'
+import { parseEther, getAddress, decodeEventLog } from 'viem'
 import { gnosis } from 'viem/chains'
 import { useRouter } from 'next/navigation'
+import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, config } from "@/lib/wagmi/config"
+
+
 
 interface CirclesGroup {
   address: string;
@@ -58,7 +61,7 @@ interface FormData {
 }
 
 export default function CreateMarket() {
-  
+
   const circlesGroups: CirclesGroup[] = [
     { address: '0x86533d1ada8ffbe7b6f7244f9a1b707f7f3e239b', name: 'Metri Core Group' },
     // Add more groups here as needed
@@ -89,15 +92,16 @@ export default function CreateMarket() {
     collateralToken: string
     conditionIds: string[]
     fee: string
+    betContractAddresses?: string[]
   } | null>(null)
-  
+
   const { askQuestion, isLoading: isAskingQuestion } = useAskQuestion((id) => {
     setQuestionId(id);
     console.log('Question created with ID:', id);
     // Here you can add any additional logic you want to perform when a question is created
   })
 
-  const { 
+  const {
     writeContractAsync: prepareConditionWrite,
     isPending: isPreparingCondition,
     isError: isPrepareError,
@@ -113,33 +117,63 @@ export default function CreateMarket() {
     data: approveTxHash
   } = useWriteContract()
 
-  const publicClient = usePublicClient()
+  const publicClient = usePublicClient({ config });
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
-    useWaitForTransactionReceipt({ 
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
       hash: (prepareTxHash || approveTxHash) as `0x${string}`
     })
 
-  // We're now getting the market address directly from the transaction receipt
-  // instead of using the event watcher
-    
+  
+
   // Get current allowance
   const { data: allowanceData, refetch: refetchAllowance } = useSimulateContract({
     address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
     abi: ERC20_ABI,
-    functionName: 'allowance',
-    args: [address || '0x0', CONDITIONAL_TOKENS_ADDRESS] as const,
+    functionName: 'approve',
+    args: [CONDITIONAL_TOKENS_ADDRESS, 115792089237316195423570985008687907853269984665640564039457584007913129639935n],
     query: {
       enabled: !!address,
     },
   })
 
-  const needsApproval = (amount: bigint) => {
-    if (!allowanceData?.result) return true
-    // Ensure the result is a bigint
-    const result = allowanceData.result as unknown
-    const currentAllowance = typeof result === 'bigint' ? result : BigInt(result as string | number)
-    return currentAllowance < amount
+  // Get current allowance - using the existing refetchAllowance from above
+  const needsApproval = async (amount: bigint) => {
+    console.log("Checking if approval is needed for amount:", amount.toString());
+    
+    if (!address) {
+      console.log('No connected wallet');
+      return true;
+    }
+
+    try {
+      console.log('Fetching allowance for:', {
+        token: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        owner: address,
+        spender: CONDITIONAL_TOKENS_ADDRESS
+      });
+
+      const allowance = await publicClient.readContract({
+        address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [address, CONDITIONAL_TOKENS_ADDRESS]  // owner, spender
+      });
+
+      console.log('Current allowance:', allowance);
+      
+      // Convert to BigInt for comparison
+      const allowanceBigInt = BigInt(allowance.toString());
+      const needsMoreApproval = allowanceBigInt < amount;
+      
+      console.log('Needs more approval?', needsMoreApproval);
+      return needsMoreApproval;
+      
+    } catch (err) {
+      console.error('Error checking allowance:', err);
+      throw new Error('Failed to check token allowance');
+    }
+    
   }
 
   const approveToken = async (amount: bigint) => {
@@ -147,17 +181,18 @@ export default function CreateMarket() {
       throw new Error('No connected wallet')
     }
 
+    // Use maximum uint256 value for unlimited approval
+    const maxUint256 = 115792089237316195423570985008687907853269984665640564039457584007913129639935n
+
     try {
-      // Add a small buffer to the approval amount to account for any potential rounding issues
-      const approvalAmount = (amount * 101n) / 100n // 1% more than needed
-      
+      // Use the maximum uint256 value for approval
       const hash = await writeContract({
         address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'approve',
-        args: [CONDITIONAL_TOKENS_ADDRESS, approvalAmount],
+        args: [CONDITIONAL_TOKENS_ADDRESS, maxUint256],
       })
-      
+
       console.log('Approval transaction hash:', hash)
       return hash
     } catch (err) {
@@ -167,12 +202,15 @@ export default function CreateMarket() {
   }
 
   const getConditionId = async (questionId: string): Promise<`0x${string}`> => {
-    if (!publicClient || !address) {
-      throw new Error('No public client or connected wallet')
+    if (!address) {
+      throw new Error('No connected wallet')
+    }
+    if (!publicClient) {
+      throw new Error('Public client not available')
     }
 
     try {
-      const conditionId = await publicClient.readContract({
+      const result = await publicClient.readContract({
         address: CONDITIONAL_TOKENS_ADDRESS,
         abi: CONDITIONAL_TOKENS_ABI,
         functionName: 'getConditionId',
@@ -183,7 +221,11 @@ export default function CreateMarket() {
         ]
       }) as `0x${string}`
 
-      return conditionId
+      if (!result) {
+        throw new Error('Failed to get condition ID')
+      }
+
+      return result
     } catch (err) {
       console.error('Error getting condition ID:', err)
       throw err
@@ -192,10 +234,10 @@ export default function CreateMarket() {
 
   const doesConditionExist = async (questionId: string): Promise<boolean> => {
     if (!address || !publicClient) return false
-    
+
     try {
       const conditionId = await getConditionId(questionId)
-      
+
       try {
         const outcomeSlotCount = await publicClient.readContract({
           address: CONDITIONAL_TOKENS_ADDRESS,
@@ -203,7 +245,7 @@ export default function CreateMarket() {
           functionName: 'getOutcomeSlotCount',
           args: [conditionId]
         }) as bigint
-        
+
         return outcomeSlotCount > 0n
       } catch (err) {
         console.error('Error checking if condition exists:', err)
@@ -219,7 +261,7 @@ export default function CreateMarket() {
     if (!address) {
       throw new Error('No connected wallet')
     }
-
+    console.log("entered prepareCondition");
     try {
       // First check if condition already exists
       const conditionExists = await doesConditionExist(questionId)
@@ -232,14 +274,24 @@ export default function CreateMarket() {
       throw err
     }
 
-    const outcomeSlotCount = formData.outcomes.length
-    
+    const outcomeSlotCount = formData.outcomes.length;
+    console.log("after 1st try-catch", outcomeSlotCount);
+
     console.log('Preparing condition with:', {
       oracle: address,
       questionId,
       outcomeSlotCount,
       contract: CONDITIONAL_TOKENS_ADDRESS
-    })
+    });
+
+    // Convert questionId to bytes32 format if it's not already
+    let questionIdBytes32: `0x${string}`
+    if (questionId.startsWith('0x') && questionId.length === 66) {
+      questionIdBytes32 = questionId as `0x${string}`
+    } else {
+      // If it's not in the correct format, hash it
+      questionIdBytes32 = `0x${questionId.replace('0x', '').padStart(64, '0')}` as `0x${string}`
+    }
 
     try {
       const hash = await prepareConditionWrite({
@@ -248,11 +300,11 @@ export default function CreateMarket() {
         functionName: 'prepareCondition',
         args: [
           address, // oracle
-          questionId as `0x${string}`, // questionId
+          questionIdBytes32, // questionId
           BigInt(outcomeSlotCount) // outcomeSlotCount
         ]
       })
-      
+
       console.log('Condition preparation transaction hash:', hash)
       return hash
     } catch (err) {
@@ -262,13 +314,14 @@ export default function CreateMarket() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+    e.preventDefault();
+    console.log("handle submit");
+
     if (!address) {
       setError("Please connect your wallet")
       return
     }
-    
+
     // Check if we're on the correct network (Gnosis Chain)
     if (chainId !== gnosis.id) {
       try {
@@ -281,41 +334,42 @@ export default function CreateMarket() {
         setIsSwitching(false)
       }
     }
-    
+
     try {
       setIsSubmitting(true)
       setError(null)
-      
+
       // Convert initial funds to wei
       const initialFundsWei = parseEther(formData.initialFunds)
-      
+
       // Step 1: Check and approve CRC token allowance if needed
-      const approvalNeeded = needsApproval(initialFundsWei)
-      
+      console.log("initialFundsWei", initialFundsWei);
+      const approvalNeeded = await needsApproval(initialFundsWei)
+
       if (approvalNeeded) {
         console.log('Approving CRC tokens...')
         await approveToken(initialFundsWei)
-        
+
         // Wait for the approval to be confirmed
         if (isApproving) {
           console.log('Waiting for approval to be confirmed...')
         }
-        
+
         if (isApproveError) {
           throw approveError || new Error('Failed to approve tokens')
         }
-        
+
         console.log('Tokens approved successfully')
-        
+
         // Refetch allowance to ensure it's updated
         await refetchAllowance()
       } else {
         console.log('Sufficient allowance already exists')
       }
-      
+
       // Step 2: Ask question on Realitio
       const templateId = BigInt(2)
-      
+
       // Format question according to Realitio's expected format for template 2
       const question = [
         formData.title.replace(/"/g, '\\"'),  // Escape quotes
@@ -323,7 +377,7 @@ export default function CreateMarket() {
         'prediction-market',
         'en'
       ].join('␟')  // Use the unicode unit separator
-      
+
       // Use Kleros 31 jurors with appeal as arbitrator
       const arbitrator = '0x5562Ac605764DC4039fb6aB56a74f7321396Cdf2' as `0x${string}`
       // 7 days timeout in seconds
@@ -332,7 +386,7 @@ export default function CreateMarket() {
       const openingTs = Math.floor(Date.now() / 1000) + 3600
       // Nonce (using current timestamp)
       const nonce = BigInt(Math.floor(Date.now() / 1000))
-      
+
       console.log('Asking question on Realitio...', {
         templateId,
         question,
@@ -352,53 +406,48 @@ export default function CreateMarket() {
         nonce,
         parseEther('0.1') // Bond amount (0.1 xDai for now)
       );
-      
+
       if (!questionId) {
         throw new Error('Failed to get question ID from transaction');
       }
-      
+
       console.log('Question created with ID:', questionId);
-      
+
       // Step 2: Prepare condition with ConditionalTokens contract if it doesn't exist
       console.log('Checking if condition already exists...')
       const prepareResult = await prepareCondition(questionId)
-      
+
       if (prepareResult) {
         // Only wait for confirmation if we actually created a new condition
         console.log('New condition being prepared...')
-        
+
         // Wait for the condition preparation to be confirmed
         if (isPreparingCondition) {
           console.log('Waiting for condition preparation to be confirmed...')
         }
-        
+
         if (isPrepareError) {
           throw prepareError || new Error('Failed to prepare condition')
         }
-        
+
         console.log('Condition prepared successfully')
       } else {
         console.log('Using existing condition')
       }
-      
+
       // Step 3: Create the market using FPMMDeterministicFactory
       console.log('Creating market with FPMMDeterministicFactory...')
-      
+
       // Generate a random salt nonce
       const saltNonce = BigInt(Math.floor(Math.random() * 1e18))
-      
+
       // Convert fee percentage to basis points (e.g., 2.0% -> 200)
       const feeBasisPoints = Math.round(parseFloat(formData.feePercentage) * 100)
-      
-      // Calculate distribution hint (equal distribution for now)
-      const distributionHint = [] as BigInt[];
-      // const distributionHint = Array(formData.outcomes.length).fill(
-      //   (BigInt(1e18) * BigInt(100)) / BigInt(formData.outcomes.length)
-      // )
-      
+
+
       // Get the condition ID first
       const conditionId = await getConditionId(questionId!)
-      
+
       // Call create2FixedProductMarketMaker
       const createMarketHash = await writeContract({
         address: FPMM_DETERMINISTIC_FACTORY_ADDRESS,
@@ -411,42 +460,179 @@ export default function CreateMarket() {
           [conditionId],
           BigInt(feeBasisPoints),
           parseEther(formData.initialFunds),
-          distributionHint
+          []
         ]
       })
-      
-      console.log('Market creation transaction hash:', createMarketHash)
-      
-      // Wait for the market creation transaction to be confirmed
-      if (!publicClient) {
-        throw new Error('Public client not available')
+
+      console.log('Market creation transaction hash:', createMarketHash);
+
+
+      // Wait for transaction receipt with retry logic
+      console.log('Waiting for transaction receipt...');
+      let receipt;
+      const maxRetries = 3;
+      let retryCount = 0;
+
+      while (retryCount < maxRetries && !receipt) {
+        try {
+          console.log(`Attempt ${retryCount + 1} to get receipt...`);
+          receipt = await publicClient.waitForTransactionReceipt({
+            hash: createMarketHash,
+            timeout: 60_000,
+            confirmations: 1,
+            onReplaced: (replacement) => {
+              console.log('Transaction replaced:', replacement);
+            },
+          });
+        } catch (err) {
+          console.error(`Attempt ${retryCount + 1} failed:`, err);
+          retryCount++;
+          if (retryCount >= maxRetries) {
+            throw new Error(`Failed to get receipt after ${maxRetries} attempts: ${err instanceof Error ? err.message : String(err)}`);
+          }
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 10_000));
+        }
       }
-      
-      const receipt = await publicClient.waitForTransactionReceipt({
-        hash: createMarketHash
-      })
-      
-      console.log('Market created successfully:', receipt)
-      
-      // Get the return value from the transaction receipt
-      const returnData = receipt.logs?.[0]?.data || ''
-      // The return value is the last 32 bytes of the data
-      const marketAddress = '0x' + returnData.slice(-40)
-      
-      // Set the market creation result with the address from the return value
+
+      if (!receipt) {
+        throw new Error('Failed to get transaction receipt after multiple attempts');
+      }
+
+      console.log('Transaction receipt received. Status:', receipt.status);
+      console.log('Block number:', receipt.blockNumber);
+      console.log('Transaction index:', receipt.transactionIndex);
+
+      console.log('Market created successfully. Transaction status:', receipt.status)
+      console.log('Transaction receipt:', receipt)
+
+      // Set up event watcher for FixedProductMarketMakerCreation event
+      console.log('Setting up event watcher for FixedProductMarketMakerCreation event...');
+
+      // Get the ABI for the event
+      const eventLog = receipt.logs?.find(log =>
+        log.topics[0] === '0x92e0912d3d7f3192cad5c7ae3b47fb97f9c465c1dd12a5c24fd901ddb3905f43'
+      );
+
+      // Use Promise to handle the event watching asynchronously
+      let marketAddress: string | undefined;
+
+      if (eventLog) {
+        const decodedEvent = decodeEventLog({
+          abi: FPMM_DETERMINISTIC_FACTORY_ABI,
+          data: eventLog.data,
+          topics: eventLog.topics,
+        })
+
+        console.log('Decoded event:', decodedEvent)
+
+        // Extract specific values with proper typing
+        const {
+          creator,
+          fixedProductMarketMaker,
+          conditionalTokens,
+          collateralToken,
+          conditionIds,
+          fee
+        } = decodedEvent.args
+        marketAddress = fixedProductMarketMaker;
+        console.log('Market Address:', fixedProductMarketMaker)
+        console.log('Creator:', creator)
+        console.log('Conditional Tokens:', conditionalTokens)
+        console.log('Collateral Token:', collateralToken)
+        console.log('Condition IDs:', conditionIds)
+        console.log('Fee:', fee)
+      }
+
+      if (!marketAddress) {
+        throw new Error('Market address is not available');
+      }
+
+      console.log('Market created at address:', marketAddress);
+
+      // Create a bet contract for each outcome
+      const txHashes: string[] = [];
+      const outcomeIndexes: number[] = [];
+      const betContractIdentifiers: string[] = [];
+      const metadataDigests: `0x${string}`[] = [];
+      // ToDo - get conditionId from market
+
+      for (let outcomeIndex = 0; outcomeIndex < formData.outcomes.length; outcomeIndex++) {
+        outcomeIndexes.push(outcomeIndex + 1);
+        // Generate a unique identifier for this bet contract
+        const betContractIdentifier = `${formData.title} - ${formData.outcomes[outcomeIndex]}`;
+        betContractIdentifiers.push(betContractIdentifier);
+
+        // Use the first 32 bytes of the questionId as metadata digest
+        // Todo - use organization metadata digest       
+        metadataDigests.push("0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`);
+      }
+      console.log("before creating bet contracts");
+      console.log("fpmm market", getAddress(marketAddress));
+      console.log("circles group", formData.circlesGroup);
+      console.log("condition id", conditionId);
+      console.log("bet contract identifiers", betContractIdentifiers);
+      console.log("metadata digests", metadataDigests);
+
+      // Call createBetContract
+      const txHash = await writeContract({
+        address: BET_CONTRACT_FACTORY_ADDRESS,
+        abi: BET_CONTRACT_FACTORY_ABI,
+        functionName: 'createContractsForFpmm',
+        args: [
+          getAddress(marketAddress), // fpmmAddress
+          getAddress(formData.circlesGroup), // groupCRCToken (using circles group address)
+          outcomeIndexes,
+          [conditionId],
+          betContractIdentifiers,
+          metadataDigests
+        ]
+      });
+      console.log("created bet contracts", txHash);
+
+      txHashes.push(txHash);
+
+
+      // Wait for all transactions to be mined
+      if (!publicClient) {
+        throw new Error('Public client not available');
+      }
+
+      await Promise.all(
+        txHashes.map(txHash =>
+          publicClient.waitForTransactionReceipt({ hash: txHash as `0x${string}` })
+        )
+      );
+
+      // Get the bet contract addresses using getMarketInfo
+      const marketInfo = await publicClient.readContract({
+        address: BET_CONTRACT_FACTORY_ADDRESS,
+        abi: BET_CONTRACT_FACTORY_ABI,
+        functionName: 'getMarketInfo',
+        args: [getAddress(marketAddress)]
+      });
+
+      if (!marketInfo || typeof marketInfo !== 'object' || !('betContracts' in marketInfo)) {
+        throw new Error('Market info is missing or invalid');
+      }
+      const betContractAddresses = (marketInfo as { betContracts: unknown }).betContracts as `0x${string}`[];
+      console.log('Bet contracts created:', betContractAddresses);
+
+      // Set the market creation result with the addresses
       setMarketCreationResult({
         creator: address || '',
         fixedProductMarketMaker: marketAddress,
         conditionalTokens: CONDITIONAL_TOKENS_ADDRESS,
         collateralToken: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
         conditionIds: [conditionId],
-        fee: feeBasisPoints.toString()
+        fee: feeBasisPoints.toString(),
+        betContractAddresses: betContractAddresses
       })
-      
+
       // Redirect to the market page with the questionId
       //router.push(`/market/${questionId}`)
-      
-      
+
+
     } catch (err) {
       console.error('Error creating market:', err)
       setError(err instanceof Error ? err.message : 'Failed to create market')
@@ -654,15 +840,15 @@ export default function CreateMarket() {
               type="submit"
               disabled={formData.outcomes.length < 2 || isSubmitting || isAskingQuestion || isSwitching}
               className={`px-6 py-2 text-base font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${formData.outcomes.length < 2
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
                 }`}
             >
               {isSwitching ? 'Switching Network...' : isSubmitting || isAskingQuestion ? 'Creating Market...' : 'Create Market'}
             </button>
           </div>
         </div>
-        
+
         {error && (
           <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400">
             <div className="flex">
@@ -681,7 +867,7 @@ export default function CreateMarket() {
         {marketCreationResult && (
           <div className="mt-6 p-6 bg-green-50 border-l-4 border-green-400 rounded-lg">
             <h3 className="text-lg font-bold text-green-800 mb-4">🎉 Market Created Successfully!</h3>
-            
+
             {/* Market ID Section */}
             <div className="mb-4 p-3 bg-white rounded-md border border-green-200">
               <div className="flex justify-between items-center">

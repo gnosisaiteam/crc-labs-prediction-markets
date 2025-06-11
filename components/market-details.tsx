@@ -1,9 +1,9 @@
 import type { MarketInfo } from "@/lib/types"
 import { QRCode } from "@/components/qr-code"
 import { useState, useEffect } from "react"
-import { createPublicClient, http } from 'viem'
-import { gnosis, mainnet } from 'viem/chains'
+import { usePublicClient } from 'wagmi'
 import { BET_CONTRACT_ABI } from "@/lib/constants"
+import { config } from "@/lib/wagmi/config"
 
 interface MarketDetailsProps {
   marketInfo: MarketInfo
@@ -61,10 +61,7 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
     fetchMarketData();
   }, []);
 
-  const publicClient = createPublicClient({
-    chain: gnosis,
-    transport: http("http://localhost:8545")
-  });
+  const publicClient = usePublicClient({config});
 
   const fetchProfile = async (address: string): Promise<ProfileData | null> => {
     try {
@@ -104,6 +101,11 @@ export function MarketDetails({ marketInfo }: MarketDetailsProps) {
   };
 
   const fetchBettors = async (contractAddress: string) => {
+    if (!publicClient) {
+      console.error('Public client not available');
+      return;
+    }
+
     try {
       const data = await publicClient.readContract({
         address: contractAddress as `0x${string}`,

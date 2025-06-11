@@ -1,45 +1,14 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Link from "next/link"
-import { createPublicClient, http } from "viem"
-import { gnosis } from "viem/chains"
+import { usePublicClient } from 'wagmi'
 import { ItemList } from "@/components/item-list"
 import { MarketDetails } from "@/components/market-details"
 import { LoadingSpinner } from "@/components/loading-spinner"
 import type { MarketInfo } from "@/lib/types"
+import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, config } from "@/lib/wagmi/config"
 
-// Contract address
-const CONTRACT_ADDRESS = "0x62a3Cf54A77189A6680Ec0368432f72D73a87440"
 
-// ABI for the contract functions we need
-const CONTRACT_ABI = [
-  {
-    inputs: [],
-    name: "getAllProcessedFPMMAddresses",
-    outputs: [{ type: "address[]", name: "" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ type: "address", name: "fpmmAddress" }],
-    name: "getMarketInfo",
-    outputs: [
-      {
-        components: [
-          { type: "address", name: "fpmmAddress" },
-          { type: "address", name: "groupCRCToken" },
-          { type: "uint256[]", name: "outcomeIdxs" },
-          { type: "address[]", name: "betContracts" },
-        ],
-        type: "tuple",
-        name: "marketInfo",
-      },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-]
 
 export default function Home() {
   const [marketAddresses, setMarketAddresses] = useState<string[]>([])
@@ -49,22 +18,25 @@ export default function Home() {
   const [isLoadingMarketInfo, setIsLoadingMarketInfo] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Create a public client for Gnosis chain
-  const client = createPublicClient({
-    chain: gnosis,
-    transport: http(),
-  })
+  const client = usePublicClient({config});
+
 
   // Fetch the list of market addresses
   useEffect(() => {
     const fetchMarketAddresses = async () => {
+      if (!client) {
+        setError("Client not initialized. Please check your wallet connection.");
+        setIsLoadingAddresses(false);
+        return;
+      }
+
       try {
         setIsLoadingAddresses(true)
         setError(null)
 
         const addresses = (await client.readContract({
-          address: CONTRACT_ADDRESS,
-          abi: CONTRACT_ABI,
+          address: BET_CONTRACT_FACTORY_ADDRESS,
+          abi: BET_CONTRACT_FACTORY_ABI,
           functionName: "getAllProcessedFPMMAddresses",
         })) as string[]
 
@@ -84,20 +56,20 @@ export default function Home() {
     }
 
     fetchMarketAddresses()
-  }, [])
+  }, [client])
 
   // Fetch market info when a market is selected
   useEffect(() => {
     const fetchMarketInfo = async () => {
-      if (!selectedMarketAddress) return
+      if (!selectedMarketAddress || !client) return
 
       try {
         setIsLoadingMarketInfo(true)
         setError(null)
 
         const marketInfo = (await client.readContract({
-          address: CONTRACT_ADDRESS,
-          abi: CONTRACT_ABI,
+          address: BET_CONTRACT_FACTORY_ADDRESS,
+          abi: BET_CONTRACT_FACTORY_ABI,
           functionName: "getMarketInfo",
           args: [selectedMarketAddress],
         })) as MarketInfo
@@ -112,7 +84,7 @@ export default function Home() {
     }
 
     fetchMarketInfo()
-  }, [selectedMarketAddress])
+  }, [selectedMarketAddress, client])
 
   return (
     <main className="flex min-h-screen flex-col">
