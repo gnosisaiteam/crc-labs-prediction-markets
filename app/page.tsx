@@ -6,7 +6,9 @@ import { ItemList } from "@/components/item-list"
 import { MarketDetails } from "@/components/market-details"
 import { LoadingSpinner } from "@/components/loading-spinner"
 import type { MarketInfo } from "@/lib/types"
-import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, config } from "@/lib/wagmi/config"
+import { config } from "@/lib/wagmi/config"
+import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS } from "@/lib/constants"
+
 
 
 

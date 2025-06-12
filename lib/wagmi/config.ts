@@ -9,6 +9,7 @@ export const config = createConfig({
   ],
   ssr: true,
   transports: {
-    [gnosis.id]: http('https://virtual.gnosis.rpc.tenderly.co/fc5a1921-bd87-49f7-8910-60a5dcd8bb18'),
+    //[gnosis.id]: http('https://virtual.gnosis.rpc.tenderly.co/4478dbfb-2795-46b9-841e-667309f0d474'),
+    [gnosis.id]: http(),
   },
 });

@@ -65,6 +65,15 @@ export function useAskQuestion(onQuestionCreated?: (questionId: string) => void)
     if (!writeContractAsync) return null;
     
     try {
+      console.log('Asking question close to write contract async', {
+        templateId,
+        question,
+        arbitrator,
+        timeout,
+        openingTs,
+        nonce,
+        value
+      });
       const hash = await writeContractAsync({
         address: REALITIO_ADDRESS as `0x${string}`,
         abi: REALITIO_ABI,

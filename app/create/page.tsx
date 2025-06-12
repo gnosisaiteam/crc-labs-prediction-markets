@@ -1,49 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
-import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSimulateContract, useWatchContractEvent, useReadContract } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSimulateContract } from 'wagmi'
 import { WalletConnectButton } from "@/components/wallet-connect-button"
 import { useAskQuestion } from "@/hooks/useRealitio"
 import { CONDITIONAL_TOKENS_ABI, CONDITIONAL_TOKENS_ADDRESS } from "@/lib/contracts/conditionalTokens"
-import { ERC20_ABI, CRC_WRAPPED_ERC20_TOKEN_ADDRESS } from "@/lib/contracts/erc20"
+import { ERC20_ABI } from "@/lib/contracts/erc20"
 
-const FPMM_DETERMINISTIC_FACTORY_ADDRESS = '0x9083A2B699c0a4AD06F63580BDE2635d26a3eeF0' as `0x${string}`
-const FPMM_DETERMINISTIC_FACTORY_ABI = [
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "saltNonce", "type": "uint256" },
-      { "internalType": "contract ConditionalTokens", "name": "conditionalTokens", "type": "address" },
-      { "internalType": "contract IERC20", "name": "collateralToken", "type": "address" },
-      { "internalType": "bytes32[]", "name": "conditionIds", "type": "bytes32[]" },
-      { "internalType": "uint256", "name": "fee", "type": "uint256" },
-      { "internalType": "uint256", "name": "initialFunds", "type": "uint256" },
-      { "internalType": "uint256[]", "name": "distributionHint", "type": "uint256[]" }
-    ],
-    "name": "create2FixedProductMarketMaker",
-    "outputs": [{ "internalType": "contract FixedProductMarketMaker", "name": "", "type": "address" }],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      { "indexed": true, "internalType": "address", "name": "creator", "type": "address" },
-      { "indexed": false, "internalType": "contract FixedProductMarketMaker", "name": "fixedProductMarketMaker", "type": "address" },
-      { "indexed": false, "internalType": "contract ConditionalTokens", "name": "conditionalTokens", "type": "address" },
-      { "indexed": false, "internalType": "contract IERC20", "name": "collateralToken", "type": "address" },
-      { "indexed": false, "internalType": "bytes32[]", "name": "conditionIds", "type": "bytes32[]" },
-      { "indexed": false, "internalType": "uint256", "name": "fee", "type": "uint256" }
-    ],
-    "name": "FixedProductMarketMakerCreation",
-    "type": "event"
-  }
-] as const
+
 import { parseEther, getAddress, decodeEventLog } from 'viem'
 import { gnosis } from 'viem/chains'
-import { useRouter } from 'next/navigation'
-import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, config } from "@/lib/wagmi/config"
-
+import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, FPMM_DETERMINISTIC_FACTORY_ABI, FPMM_DETERMINISTIC_FACTORY_ADDRESS } from "@/lib/constants"
+import { config } from "@/lib/wagmi/config"
 
 
 interface CirclesGroup {
@@ -60,9 +28,14 @@ interface FormData {
   circlesGroup: string;
 }
 
+const CRC_GROUP_ADDRESS = "0x44057a3af7f746bd4f957fe0b22b1f82423c2b4a";
+const ERC20_CRC_GROUP_ADDRESS = "0xB783d9cB66404D1061C2998596a0174990986866";
+const ORACLE_ADDRESS = "0xAB16D643bA051C11962DA645f74632d3130c81E2";
+
 export default function CreateMarket() {
 
   const circlesGroups: CirclesGroup[] = [
+    { address: CRC_GROUP_ADDRESS, name: 'Dappcon25' },
     { address: '0x86533d1ada8ffbe7b6f7244f9a1b707f7f3e239b', name: 'Metri Core Group' },
     // Add more groups here as needed
   ]
@@ -73,7 +46,7 @@ export default function CreateMarket() {
     outcomes: ["Yes", "No"],
     initialFunds: "0",
     feePercentage: "2.0",
-    circlesGroup: '0x86533d1ada8ffbe7b6f7244f9a1b707f7f3e239b' // Default to Metri Core Group
+    circlesGroup: CRC_GROUP_ADDRESS // defaults to Dappcon25
   })
   const [newOutcome, setNewOutcome] = useState("")
 
@@ -81,10 +54,11 @@ export default function CreateMarket() {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const [isSwitching, setIsSwitching] = useState(false)
-  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [questionId, setQuestionId] = useState<string | null>(null)
+  const [questionId, setQuestionId] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+
   const [marketCreationResult, setMarketCreationResult] = useState<{
     creator: string
     fixedProductMarketMaker: string
@@ -124,11 +98,11 @@ export default function CreateMarket() {
       hash: (prepareTxHash || approveTxHash) as `0x${string}`
     })
 
-  
+
 
   // Get current allowance
   const { data: allowanceData, refetch: refetchAllowance } = useSimulateContract({
-    address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+    address: ERC20_CRC_GROUP_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'approve',
     args: [CONDITIONAL_TOKENS_ADDRESS, 115792089237316195423570985008687907853269984665640564039457584007913129639935n],
@@ -139,44 +113,45 @@ export default function CreateMarket() {
 
   // Get current allowance - using the existing refetchAllowance from above
   const needsApproval = async (amount: bigint) => {
-    console.log("Checking if approval is needed for amount:", amount.toString());
-    
     if (!address) {
-      console.log('No connected wallet');
-      return true;
+      throw new Error('No connected wallet')
     }
+    console.log("Checking if approval is needed for amount:", amount.toString());
 
     try {
       console.log('Fetching allowance for:', {
-        token: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        token: ERC20_CRC_GROUP_ADDRESS,
         owner: address,
         spender: CONDITIONAL_TOKENS_ADDRESS
       });
 
       const allowance = await publicClient.readContract({
-        address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        address: ERC20_CRC_GROUP_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        args: [address, CONDITIONAL_TOKENS_ADDRESS]  // owner, spender
+        args: [address!, CONDITIONAL_TOKENS_ADDRESS]  // owner, spender
       });
 
       console.log('Current allowance:', allowance);
-      
+
       // Convert to BigInt for comparison
       const allowanceBigInt = BigInt(allowance.toString());
       const needsMoreApproval = allowanceBigInt < amount;
-      
+      console.log("needsMoreApproval", needsMoreApproval);
+      console.log("allowance big int", allowanceBigInt);
+      console.log("amount", amount);
+
       console.log('Needs more approval?', needsMoreApproval);
       return needsMoreApproval;
-      
+
     } catch (err) {
       console.error('Error checking allowance:', err);
       throw new Error('Failed to check token allowance');
     }
-    
+
   }
 
-  const approveToken = async (amount: bigint) => {
+  const approveToken = async () => {
     if (!address) {
       throw new Error('No connected wallet')
     }
@@ -187,7 +162,7 @@ export default function CreateMarket() {
     try {
       // Use the maximum uint256 value for approval
       const hash = await writeContract({
-        address: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        address: ERC20_CRC_GROUP_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [CONDITIONAL_TOKENS_ADDRESS, maxUint256],
@@ -215,7 +190,7 @@ export default function CreateMarket() {
         abi: CONDITIONAL_TOKENS_ABI,
         functionName: 'getConditionId',
         args: [
-          address, // oracle
+          ORACLE_ADDRESS, // oracle
           questionId as `0x${string}`, // questionId
           BigInt(formData.outcomes.length) // outcomeSlotCount
         ]
@@ -278,7 +253,7 @@ export default function CreateMarket() {
     console.log("after 1st try-catch", outcomeSlotCount);
 
     console.log('Preparing condition with:', {
-      oracle: address,
+      oracle: ORACLE_ADDRESS,
       questionId,
       outcomeSlotCount,
       contract: CONDITIONAL_TOKENS_ADDRESS
@@ -299,7 +274,7 @@ export default function CreateMarket() {
         abi: CONDITIONAL_TOKENS_ABI,
         functionName: 'prepareCondition',
         args: [
-          address, // oracle
+          ORACLE_ADDRESS, // oracle
           questionIdBytes32, // questionId
           BigInt(outcomeSlotCount) // outcomeSlotCount
         ]
@@ -312,6 +287,29 @@ export default function CreateMarket() {
       throw err
     }
   }
+
+  const prepareBetContractIdentifier = (outcomeIndex: number) => {
+    const outcome = formData.outcomes[outcomeIndex];
+    const separator = " - ";
+    const titlePrefix = formData.title.slice(0, 32 - outcome.length - separator.length);
+    const betContractIdentifier = `${titlePrefix}${separator}${outcome}`;
+    console.log("length contract identifier", betContractIdentifier, betContractIdentifier.length)
+    return betContractIdentifier;
+  };
+
+  const prepareLiquidityContractIdentifiers = () => {
+    const suffix1 = "add";
+    const suffix2 = "sub";
+    const separator = " - ";
+    const results = [];
+    for (let i of [suffix1, suffix2]){
+      const titlePrefix = formData.title.slice(0, 32 - i.length - separator.length);
+      const liquidityContractIdentifier = `${titlePrefix}${separator}${i}`;
+      console.log("length contract identifier", liquidityContractIdentifier, liquidityContractIdentifier.length)
+      results.push(liquidityContractIdentifier);
+    }
+    return results;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -348,7 +346,7 @@ export default function CreateMarket() {
 
       if (approvalNeeded) {
         console.log('Approving CRC tokens...')
-        await approveToken(initialFundsWei)
+        await approveToken()
 
         // Wait for the approval to be confirmed
         if (isApproving) {
@@ -381,18 +379,21 @@ export default function CreateMarket() {
       // Use Kleros 31 jurors with appeal as arbitrator
       const arbitrator = '0x5562Ac605764DC4039fb6aB56a74f7321396Cdf2' as `0x${string}`
       // 7 days timeout in seconds
-      const timeout = 7 * 24 * 60 * 60
-      // Current timestamp + 1 hour
-      const openingTs = Math.floor(Date.now() / 1000) + 3600
+      const timeout = 7 * 24 * 60 * 60;
+            
+      
+      const closingTimestamp = Math.floor(new Date(formData.closingDate).getTime() / 1000);
+      console.log("closingTimestamp", closingTimestamp);
       // Nonce (using current timestamp)
-      const nonce = BigInt(Math.floor(Date.now() / 1000))
+      //const nonce = BigInt(Math.floor(Date.now() / 1000))
+      const nonce = 0;
 
       console.log('Asking question on Realitio...', {
         templateId,
         question,
         arbitrator,
         timeout,
-        openingTs,
+        closingTimestamp,
         nonce
       })
       console.log('before ask question');
@@ -402,7 +403,7 @@ export default function CreateMarket() {
         question,
         arbitrator,
         timeout,
-        openingTs,
+        closingTimestamp,
         nonce,
         parseEther('0.1') // Bond amount (0.1 xDai for now)
       );
@@ -448,7 +449,7 @@ export default function CreateMarket() {
       // Get the condition ID first
       const conditionId = await getConditionId(questionId!)
 
-      // Call create2FixedProductMarketMaker
+
       const createMarketHash = await writeContract({
         address: FPMM_DETERMINISTIC_FACTORY_ADDRESS,
         abi: FPMM_DETERMINISTIC_FACTORY_ABI,
@@ -456,7 +457,7 @@ export default function CreateMarket() {
         args: [
           saltNonce,
           CONDITIONAL_TOKENS_ADDRESS,
-          CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+          ERC20_CRC_GROUP_ADDRESS,
           [conditionId],
           BigInt(feeBasisPoints),
           parseEther(formData.initialFunds),
@@ -559,20 +560,21 @@ export default function CreateMarket() {
 
       for (let outcomeIndex = 0; outcomeIndex < formData.outcomes.length; outcomeIndex++) {
         outcomeIndexes.push(outcomeIndex + 1);
-        // Generate a unique identifier for this bet contract
-        const betContractIdentifier = `${formData.title} - ${formData.outcomes[outcomeIndex]}`;
+        const betContractIdentifier = prepareBetContractIdentifier(outcomeIndex); 
         betContractIdentifiers.push(betContractIdentifier);
 
         // Use the first 32 bytes of the questionId as metadata digest
         // Todo - use organization metadata digest       
         metadataDigests.push("0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`);
       }
+      const liquidityContractIdentifiers = prepareLiquidityContractIdentifiers();
       console.log("before creating bet contracts");
       console.log("fpmm market", getAddress(marketAddress));
       console.log("circles group", formData.circlesGroup);
       console.log("condition id", conditionId);
       console.log("bet contract identifiers", betContractIdentifiers);
       console.log("metadata digests", metadataDigests);
+      console.log("liquidity contract identifiers", liquidityContractIdentifiers);
 
       // Call createBetContract
       const txHash = await writeContract({
@@ -585,6 +587,8 @@ export default function CreateMarket() {
           outcomeIndexes,
           [conditionId],
           betContractIdentifiers,
+          metadataDigests,
+          liquidityContractIdentifiers,
           metadataDigests
         ]
       });
@@ -623,7 +627,7 @@ export default function CreateMarket() {
         creator: address || '',
         fixedProductMarketMaker: marketAddress,
         conditionalTokens: CONDITIONAL_TOKENS_ADDRESS,
-        collateralToken: CRC_WRAPPED_ERC20_TOKEN_ADDRESS,
+        collateralToken: ERC20_CRC_GROUP_ADDRESS,
         conditionIds: [conditionId],
         fee: feeBasisPoints.toString(),
         betContractAddresses: betContractAddresses
@@ -875,16 +879,7 @@ export default function CreateMarket() {
                   <p className="text-sm font-medium text-gray-500 mb-1">Market ID</p>
                   <p className="font-mono text-sm break-all">{marketCreationResult.fixedProductMarketMaker}</p>
                 </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(marketCreationResult.fixedProductMarketMaker);
-                    // You might want to add a toast notification here
-                  }}
-                  className="ml-2 px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors"
-                  title="Copy to clipboard"
-                >
-                  Copy
-                </button>
+
               </div>
             </div>
 
@@ -904,25 +899,7 @@ export default function CreateMarket() {
               </div>
             </div>
 
-            <div className="mt-4 pt-4 border-t border-green-100">
-              <a
-                href={`/market/${marketCreationResult.fixedProductMarketMaker}`}
-                className="inline-block mr-4 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors"
-              >
-                Go to Market
-              </a>
-              <a
-                href={`https://gnosisscan.io/address/${marketCreationResult.fixedProductMarketMaker}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center text-sm font-medium text-green-700 hover:text-green-600"
-              >
-                View on block explorer
-                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </a>
-            </div>
+
           </div>
         )}
       </form>
