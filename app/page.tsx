@@ -50,12 +50,14 @@ export default function Home() {
             {
               fixedProductMarketMakers(where: {
               id_in: [${addresses.map(addr => `"${addr.toLowerCase()}"`).join(",")}],
-              collateralToken: "${ALLOWED_COLLATERAL.toLowerCase()}"
+              collateralToken: "${ALLOWED_COLLATERAL.toLowerCase()}",
+              liquidityMeasure_gt: 0,
               }) {
                 id
                 outcomes
                 title
                 outcomeTokenAmounts
+                liquidityMeasure
               }
             }
           `;
@@ -70,7 +72,7 @@ export default function Home() {
         });
 
         const data = await response.json();
-        console.log("data", data.data.fixedProductMarketMakers);
+        
 
         // Create a map of market data by address
         const marketsDataMap = data.data.fixedProductMarketMakers

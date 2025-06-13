@@ -11,6 +11,7 @@ interface FetchedMarketData {
   outcomes: string[];
   title: string;
   outcomeTokenAmounts?: string[];
+  liquidityMeasure?: string;
 }
 
 interface MarketDetailsProps {
@@ -43,6 +44,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
               outcomes
               title
               outcomeTokenAmounts
+              liquidityMeasure
             }
           }
         `;
@@ -116,7 +118,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
         abi: BET_CONTRACT_ABI,
         functionName: 'getAddressesWithBalanceGreaterThan0',
       }) as `0x${string}`[];
-      console.log("bettors", data);
+      
       
       if (data) {
         setBettorsByContract(prev => ({
@@ -207,6 +209,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
               );
             })}
           </div>
+         
           
         </div>
       </div>

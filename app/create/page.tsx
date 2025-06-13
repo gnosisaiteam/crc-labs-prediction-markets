@@ -45,7 +45,7 @@ export default function CreateMarket() {
     outcomes: ["Yes", "No"],
     feePercentage: "2.0",
     circlesGroup: circlesGroups[0],
-    timeoutMinutes: "10080" // Default 7 days in minutes (7 * 24 * 60)
+    timeoutMinutes: "10"
   })
   const [newOutcome, setNewOutcome] = useState("")
 
