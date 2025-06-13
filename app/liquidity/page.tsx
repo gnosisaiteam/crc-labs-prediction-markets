@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useReadContract } from 'wagmi'
+import { getLogs } from 'viem/actions'
 import { LoadingSpinner } from "@/components/loading-spinner"
 import { ALLOWED_COLLATERAL, BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, ERC20_CRC_METRI_CORE_GROUP_ADDRESS, FPMM_ABI } from "@/lib/constants"
 import { usePublicClient } from 'wagmi'
@@ -10,6 +11,7 @@ import { config } from "@/lib/wagmi/config"
 import { QRCode } from "@/components/qr-code"
 import { CopyButton } from "@/components/copy-button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { parseAbiItem } from "viem"
 
 
 
@@ -41,7 +43,7 @@ export default function LiquidityPage() {
     functionName: 'getAllProcessedFPMMAddresses',
   });
 
- 
+
 
   // Effect to fetch liquidity info for all markets when they change
   useEffect(() => {
@@ -53,12 +55,12 @@ export default function LiquidityPage() {
 
       for (let i = 0; i < updatedMarkets.length; i++) {
         const market = updatedMarkets[i];
-        
+
         // Skip if we already have liquidity info for this market
         if (market.liquidityInfo) continue;
 
         try {
-          
+
           console.log("fetching");
           const result = await publicClient.readContract({
             address: BET_CONTRACT_FACTORY_ADDRESS,
@@ -104,6 +106,7 @@ export default function LiquidityPage() {
           const addresses = marketAddresses as string[]
           const filteredMarkets: ProcessedMarket[] = [];
 
+          
           // Process each market to check collateral token
           for (const address of addresses) {
             try {
@@ -114,7 +117,8 @@ export default function LiquidityPage() {
                 functionName: 'collateralToken',
                 args: [],
               });
-              
+
+
               // Only include markets with the correct collateral token
               if (marketCollateral === ALLOWED_COLLATERAL) {
                 filteredMarkets.push({
@@ -145,8 +149,25 @@ export default function LiquidityPage() {
   return (
     <main className="container mx-auto py-6 px-4">
       <div className="max-w-3xl mx-auto">
+      <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-medium">Instructions</CardTitle>
+                        <CardDescription>
+                          <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
+                            <ul className="list-disc pl-4">
+                              <li>Admin can add liquidity to markets to make trades between outcome tokens (YES/NO) possible</li>
+                              <li>Liquidity providers earn fees from trades</li>
+                              <li>Liquidity providers can remove their liquidity, but collateral will only be returned after market resolution</li>
+                              <li>When removing liquidity, any CRC sent is burned, thus only send a tiny amount (0.1 CRC)</li>
+                            </ul>
+                            
+                          </div>
+                        </CardDescription>
+                      </CardHeader>
+                      
+                    </Card>
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold">Processed Markets</h1>
+          <h1 className="text-2xl font-bold">Markets</h1>
         </div>
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
@@ -182,9 +203,9 @@ export default function LiquidityPage() {
                   </div>
                 </div>
                 {market.liquidityInfo ? (
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card>
-                      <CardHeader className="pb-2">
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card className="h-full flex flex-col">
+                      <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-medium">Add Liquidity</CardTitle>
                         <CardDescription>
                           <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
@@ -193,12 +214,22 @@ export default function LiquidityPage() {
                           </div>
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="flex justify-center">
-                        <QRCode value={market.liquidityInfo.liquidityAdder} size={160} />
+                      <CardContent className="flex-1 flex flex-col items-center justify-between p-4 pt-0 space-y-4">
+                        <div className="w-full flex justify-center py-2">
+                          <QRCode value={market.liquidityInfo.liquidityAdder} size={160} />
+                        </div>
+                        <a
+                          href={`https://app.metri.xyz/transfer/${market.liquidityInfo.liquidityAdder}/crc`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center text-white bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-sm transition-colors"
+                        >
+                          Add liquidity via Metri
+                        </a>
                       </CardContent>
                     </Card>
-                    <Card>
-                      <CardHeader className="pb-2">
+                    <Card className="h-full flex flex-col">
+                      <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-medium">Remove Liquidity</CardTitle>
                         <CardDescription>
                           <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
@@ -207,8 +238,18 @@ export default function LiquidityPage() {
                           </div>
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="flex justify-center">
-                        <QRCode value={market.liquidityInfo.liquidityRemover} size={160} />
+                      <CardContent className="flex-1 flex flex-col items-center justify-between p-4 pt-0 space-y-4">
+                        <div className="w-full flex justify-center py-2">
+                          <QRCode value={market.liquidityInfo.liquidityRemover} size={160} />
+                        </div>
+                        <a
+                          href={`https://app.metri.xyz/transfer/${market.liquidityInfo.liquidityRemover}/crc`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center justify-center text-white bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-md text-sm transition-colors"
+                        >
+                          Remove liquidity via Metri (send only 0.1 CRC)
+                        </a>
                       </CardContent>
                     </Card>
                   </div>

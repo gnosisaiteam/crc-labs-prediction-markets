@@ -22,7 +22,7 @@ export function Header() {
           >
             Markets
           </Link>
-          <Link 
+          {/* <Link 
             href="/create" 
             className={`px-3 py-2 text-sm font-medium ${
               isActive('/create') 
@@ -31,8 +31,8 @@ export function Header() {
             }`}
           >
             Create Market
-          </Link>
-          <Link 
+          </Link> */}
+          {/* <Link 
             href="/liquidity" 
             className={`px-3 py-2 text-sm font-medium ${
               isActive('/liquidity') 
@@ -41,7 +41,7 @@ export function Header() {
             }`}
           >
             Liquidity
-          </Link>
+          </Link> */}
         </div>
       </nav>
     </header>

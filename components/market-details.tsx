@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { usePublicClient } from 'wagmi'
 import { BET_CONTRACT_ABI } from "@/lib/constants"
 import { config } from "@/lib/wagmi/config"
+import { formatEther } from "viem"
 
 interface FetchedMarketData {
   id: string;
@@ -115,6 +116,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
         abi: BET_CONTRACT_ABI,
         functionName: 'getAddressesWithBalanceGreaterThan0',
       }) as `0x${string}`[];
+      console.log("bettors", data);
       
       if (data) {
         setBettorsByContract(prev => ({
@@ -197,7 +199,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
                   <div className="font-mono text-sm">{index}: {outcome}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     {displayMarketData.outcomeTokenAmounts?.[index] && (
-                      <div>Tokens: {displayMarketData.outcomeTokenAmounts[index]}</div>
+                      <div>Tokens: {parseFloat(formatEther(BigInt(displayMarketData.outcomeTokenAmounts[index]))).toFixed(2)}</div>
                     )}
                     Probability: {(parseFloat(probability) * 100).toFixed(1)}%
                   </div>
@@ -205,10 +207,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
               );
             })}
           </div>
-          <div className="mt-4">
-            <h3 className="text-sm font-medium text-gray-500">Group CRC Token</h3>
-            <div className="font-mono text-sm bg-slate-100 p-2 rounded mt-1 break-all">{marketInfo.groupCRCToken}</div>
-          </div>
+          
         </div>
       </div>
 

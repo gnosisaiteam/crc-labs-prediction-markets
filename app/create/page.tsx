@@ -26,6 +26,7 @@ interface FormData {
   outcomes: string[];
   feePercentage: string;
   circlesGroup: CirclesGroup;
+  timeoutMinutes: string;
 }
 
 
@@ -43,7 +44,8 @@ export default function CreateMarket() {
     closingDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     outcomes: ["Yes", "No"],
     feePercentage: "2.0",
-    circlesGroup: circlesGroups[0]
+    circlesGroup: circlesGroups[0],
+    timeoutMinutes: "10080" // Default 7 days in minutes (7 * 24 * 60)
   })
   const [newOutcome, setNewOutcome] = useState("")
 
@@ -413,12 +415,9 @@ export default function CreateMarket() {
       ].join('␟')  // Use the unicode unit separator
 
 
-      // 7 days timeout in seconds
-      const timeout = 7 * 24 * 60 * 60;
-
-
+      // Convert timeout from minutes to seconds
+      const timeout = Math.round(parseFloat(formData.timeoutMinutes) * 60);
       const closingTimestamp = Math.floor(new Date(formData.closingDate).getTime() / 1000);
-      console.log("closingTimestamp", closingTimestamp);
       // Nonce (using current timestamp)
       const nonce = BigInt(Math.floor(Date.now() / 1000))
 
@@ -703,10 +702,26 @@ export default function CreateMarket() {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">Create New Market</h1>
         <WalletConnectButton />
       </div>
+
+
+      <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
+        <ul className="list-disc pl-4">
+          <li>Admin can create binary markets, which should be resolvable by a fixed date and answerable with YES or NO</li>
+          <li>Closing date denotes the date where market resolution begins and users are able to post answers</li>
+          <li>Timeout denotes how long one must wait to resolve the market after an answer to the market has been posted (default: 10min)</li>
+          
+          
+        </ul>
+
+      </div>
+
+      
+
 
       <form onSubmit={handleSubmit} className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -741,6 +756,24 @@ export default function CreateMarket() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 required
               />
+            </div>
+            <div>
+              <label htmlFor="timeoutMinutes" className="block text-sm font-medium text-gray-700 mb-1">
+                Timeout (minutes)
+              </label>
+              <input
+                type="number"
+                id="timeoutMinutes"
+                name="timeoutMinutes"
+                min="1"
+                value={formData.timeoutMinutes}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Timeout duration in minutes (e.g., 10080 for 7 days)
+              </p>
             </div>
           </div>
 
@@ -809,29 +842,26 @@ export default function CreateMarket() {
               </select>
             </div>
 
-
             <div>
               <label htmlFor="feePercentage" className="block text-sm font-medium text-gray-700 mb-1">
                 Fee Percentage
               </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  id="feePercentage"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={formData.feePercentage}
-                  name="feePercentage"
-                  onChange={handleInputChange}
-                  className="w-full pr-10 py-2 pl-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500">%</span>
-                </div>
-              </div>
+              <input
+                type="number"
+                id="feePercentage"
+                name="feePercentage"
+                min="0"
+                max="100"
+                step="0.1"
+                value={formData.feePercentage}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">The fee percentage taken by the market (e.g., 2.0 for 2%)</p>
             </div>
+
+            
           </div>
         </div>
 
