@@ -9,7 +9,7 @@ export const config = createConfig({
   ],
   ssr: true,
   transports: {
-    //[gnosis.id]: http('https://virtual.gnosis.rpc.tenderly.co/4478dbfb-2795-46b9-841e-667309f0d474'),
     [gnosis.id]: http(),
+    //[gnosis.id]: http("http://localhost:8545"),
   },
 });

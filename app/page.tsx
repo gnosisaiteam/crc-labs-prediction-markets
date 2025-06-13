@@ -80,8 +80,8 @@ export default function Home() {
             return acc;
           }, {});
 
-          // filter addresses that are included in marketsDataMap
-          const filteredAddresses = addresses.filter(addr => marketsDataMap[addr.toLowerCase()]);
+        // filter addresses that are included in marketsDataMap
+        const filteredAddresses = addresses.filter(addr => marketsDataMap[addr.toLowerCase()]);
 
         setMarketsData(marketsDataMap);
         setMarketAddresses(filteredAddresses);
@@ -185,10 +185,10 @@ export default function Home() {
                 <div className="text-red-500">{error}</div>
               </div>
             ) : selectedMarketInfo ? (
-              <MarketDetails 
-              marketInfo={selectedMarketInfo!} 
-              marketData={selectedMarketAddress ? marketsData[selectedMarketAddress.toLowerCase()] : null}
-            />
+              <MarketDetails
+                marketInfo={selectedMarketInfo!}
+                marketData={selectedMarketAddress ? marketsData[selectedMarketAddress.toLowerCase()] : null}
+              />
             ) : (
               <div className="bg-white p-6 rounded-lg shadow-md">
                 <p className="text-gray-500">Select a market to view details</p>

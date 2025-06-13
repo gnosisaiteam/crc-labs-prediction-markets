@@ -585,7 +585,7 @@ export default function CreateMarket() {
       const metadataDigests: `0x${string}`[] = [];
 
       for (let outcomeIndex = 0; outcomeIndex < formData.outcomes.length; outcomeIndex++) {
-        outcomeIndexes.push(outcomeIndex + 1);
+        outcomeIndexes.push(outcomeIndex);
         const betContractIdentifier = prepareBetContractIdentifier(outcomeIndex);
         betContractIdentifiers.push(betContractIdentifier);
 
