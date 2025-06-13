@@ -3,40 +3,38 @@
 import { useState } from "react"
 import { useAccount, useChainId, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useSimulateContract } from 'wagmi'
 import { WalletConnectButton } from "@/components/wallet-connect-button"
-import { useAskQuestion } from "@/hooks/useRealitio"
 import { CONDITIONAL_TOKENS_ABI, CONDITIONAL_TOKENS_ADDRESS } from "@/lib/contracts/conditionalTokens"
 import { ERC20_ABI } from "@/lib/contracts/erc20"
 
 
 import { parseEther, getAddress, decodeEventLog } from 'viem'
 import { gnosis } from 'viem/chains'
-import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, FPMM_DETERMINISTIC_FACTORY_ABI, FPMM_DETERMINISTIC_FACTORY_ADDRESS } from "@/lib/constants"
+import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, ORACLE_ADDRESS, CRC_DAPPCON25_GROUP_ADDRESS, CRC_METRI_CORE_GROUP_ADDRESS, ERC20_CRC_METRI_CORE_GROUP_ADDRESS, FPMM_DETERMINISTIC_FACTORY_ABI, FPMM_DETERMINISTIC_FACTORY_ADDRESS, ERC20_CRC_DAPPCON25_GROUP_ADDRESS, ARBITRATOR } from "@/lib/constants"
 import { config } from "@/lib/wagmi/config"
+import { REALITIO_ABI, REALITIO_ADDRESS } from "@/lib/contracts/realitio"
 
 
 interface CirclesGroup {
   address: string;
   name: string;
+  erc20: string;
 }
 
 interface FormData {
   title: string;
   closingDate: string;
   outcomes: string[];
-  initialFunds: string;
   feePercentage: string;
-  circlesGroup: string;
+  circlesGroup: CirclesGroup;
 }
 
-const CRC_GROUP_ADDRESS = "0x44057a3af7f746bd4f957fe0b22b1f82423c2b4a";
-const ERC20_CRC_GROUP_ADDRESS = "0xB783d9cB66404D1061C2998596a0174990986866";
-const ORACLE_ADDRESS = "0xAB16D643bA051C11962DA645f74632d3130c81E2";
+
 
 export default function CreateMarket() {
 
   const circlesGroups: CirclesGroup[] = [
-    { address: CRC_GROUP_ADDRESS, name: 'Dappcon25' },
-    { address: '0x86533d1ada8ffbe7b6f7244f9a1b707f7f3e239b', name: 'Metri Core Group' },
+    { address: CRC_METRI_CORE_GROUP_ADDRESS, erc20: ERC20_CRC_METRI_CORE_GROUP_ADDRESS, name: 'Metri core Group' },
+    { address: CRC_DAPPCON25_GROUP_ADDRESS, erc20: ERC20_CRC_DAPPCON25_GROUP_ADDRESS, name: 'Dappcon25 Group' },
     // Add more groups here as needed
   ]
 
@@ -44,9 +42,8 @@ export default function CreateMarket() {
     title: "",
     closingDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
     outcomes: ["Yes", "No"],
-    initialFunds: "0",
     feePercentage: "2.0",
-    circlesGroup: CRC_GROUP_ADDRESS // defaults to Dappcon25
+    circlesGroup: circlesGroups[0]
   })
   const [newOutcome, setNewOutcome] = useState("")
 
@@ -69,11 +66,7 @@ export default function CreateMarket() {
     betContractAddresses?: string[]
   } | null>(null)
 
-  const { askQuestion, isLoading: isAskingQuestion } = useAskQuestion((id) => {
-    setQuestionId(id);
-    console.log('Question created with ID:', id);
-    // Here you can add any additional logic you want to perform when a question is created
-  })
+
 
   const {
     writeContractAsync: prepareConditionWrite,
@@ -81,7 +74,13 @@ export default function CreateMarket() {
     isError: isPrepareError,
     error: prepareError,
     data: prepareTxHash
-  } = useWriteContract()
+  } = useWriteContract();
+
+  const {
+    writeContractAsync: writeContractAskQuestionAsync,
+    error: askQuestionError,
+    data: askQuestionHash
+  } = useWriteContract();
 
   const {
     writeContractAsync: writeContract,
@@ -98,18 +97,16 @@ export default function CreateMarket() {
       hash: (prepareTxHash || approveTxHash) as `0x${string}`
     })
 
-
-
   // Get current allowance
   const { data: allowanceData, refetch: refetchAllowance } = useSimulateContract({
-    address: ERC20_CRC_GROUP_ADDRESS,
+    address: ERC20_CRC_METRI_CORE_GROUP_ADDRESS,
     abi: ERC20_ABI,
     functionName: 'approve',
     args: [CONDITIONAL_TOKENS_ADDRESS, 115792089237316195423570985008687907853269984665640564039457584007913129639935n],
     query: {
       enabled: !!address,
     },
-  })
+  });
 
   // Get current allowance - using the existing refetchAllowance from above
   const needsApproval = async (amount: bigint) => {
@@ -120,13 +117,13 @@ export default function CreateMarket() {
 
     try {
       console.log('Fetching allowance for:', {
-        token: ERC20_CRC_GROUP_ADDRESS,
+        token: ERC20_CRC_METRI_CORE_GROUP_ADDRESS,
         owner: address,
         spender: CONDITIONAL_TOKENS_ADDRESS
       });
 
       const allowance = await publicClient.readContract({
-        address: ERC20_CRC_GROUP_ADDRESS,
+        address: ERC20_CRC_METRI_CORE_GROUP_ADDRESS,
         abi: ERC20_ABI,
         functionName: 'allowance',
         args: [address!, CONDITIONAL_TOKENS_ADDRESS]  // owner, spender
@@ -162,7 +159,7 @@ export default function CreateMarket() {
     try {
       // Use the maximum uint256 value for approval
       const hash = await writeContract({
-        address: ERC20_CRC_GROUP_ADDRESS,
+        address: formData.circlesGroup as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [CONDITIONAL_TOKENS_ADDRESS, maxUint256],
@@ -302,7 +299,7 @@ export default function CreateMarket() {
     const suffix2 = "sub";
     const separator = " - ";
     const results = [];
-    for (let i of [suffix1, suffix2]){
+    for (let i of [suffix1, suffix2]) {
       const titlePrefix = formData.title.slice(0, 32 - i.length - separator.length);
       const liquidityContractIdentifier = `${titlePrefix}${separator}${i}`;
       console.log("length contract identifier", liquidityContractIdentifier, liquidityContractIdentifier.length)
@@ -311,9 +308,76 @@ export default function CreateMarket() {
     return results;
   };
 
+  const askQuestion = async (
+    templateId: bigint,
+    question: string,
+    arbitrator: `0x${string}`,
+    timeout: number,
+    openingTs: number,
+    nonce: bigint,
+    value?: bigint
+  ) => {
+
+    if (!writeContractAskQuestionAsync || !publicClient) return null;
+
+    try {
+      console.log('Asking question close to write contract async', {
+        templateId,
+        question,
+        arbitrator,
+        timeout,
+        openingTs,
+        nonce,
+        value
+      });
+
+      // Send the transaction
+      const hash = await writeContractAskQuestionAsync({
+        address: REALITIO_ADDRESS as `0x${string}`,
+        abi: REALITIO_ABI,
+        functionName: 'askQuestion',
+        args: [templateId, question, arbitrator, timeout, openingTs, nonce],
+        value: value || BigInt(0),
+      });
+
+      console.log("Transaction hash:", hash);
+
+      // Wait for the transaction receipt
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash,
+        confirmations: 1,
+      });
+
+      // Log the receipt for debugging
+      console.log('Transaction receipt:', receipt);
+
+      // Define the LogNewQuestion event signature
+      const logNewQuestionTopic = '0xfe2dac156a3890636ce13f65f4fdf41dcaee11526e4a5374531572d92194796c';
+
+      // Find the LogNewQuestion event in the logs
+      const logNewQuestion = receipt.logs.find(
+        log => log.topics[0]?.toLowerCase() === logNewQuestionTopic.toLowerCase()
+      );
+
+      if (!logNewQuestion) {
+        throw new Error('LogNewQuestion event not found in transaction receipt');
+      }
+
+      // The questionId is the first indexed parameter (topic[1])
+      const questionId = logNewQuestion.topics[1];
+
+      console.log('Question ID from event:', questionId);
+      return questionId;
+
+    } catch (err) {
+      console.error('Error in askQuestion123:', err);
+      throw err;
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("handle submit");
+
 
     if (!address) {
       setError("Please connect your wallet")
@@ -337,34 +401,6 @@ export default function CreateMarket() {
       setIsSubmitting(true)
       setError(null)
 
-      // Convert initial funds to wei
-      const initialFundsWei = parseEther(formData.initialFunds)
-
-      // Step 1: Check and approve CRC token allowance if needed
-      console.log("initialFundsWei", initialFundsWei);
-      const approvalNeeded = await needsApproval(initialFundsWei)
-
-      if (approvalNeeded) {
-        console.log('Approving CRC tokens...')
-        await approveToken()
-
-        // Wait for the approval to be confirmed
-        if (isApproving) {
-          console.log('Waiting for approval to be confirmed...')
-        }
-
-        if (isApproveError) {
-          throw approveError || new Error('Failed to approve tokens')
-        }
-
-        console.log('Tokens approved successfully')
-
-        // Refetch allowance to ensure it's updated
-        await refetchAllowance()
-      } else {
-        console.log('Sufficient allowance already exists')
-      }
-
       // Step 2: Ask question on Realitio
       const templateId = BigInt(2)
 
@@ -376,36 +412,35 @@ export default function CreateMarket() {
         'en'
       ].join('␟')  // Use the unicode unit separator
 
-      // Use Kleros 31 jurors with appeal as arbitrator
-      const arbitrator = '0x5562Ac605764DC4039fb6aB56a74f7321396Cdf2' as `0x${string}`
+
       // 7 days timeout in seconds
       const timeout = 7 * 24 * 60 * 60;
-            
-      
+
+
       const closingTimestamp = Math.floor(new Date(formData.closingDate).getTime() / 1000);
       console.log("closingTimestamp", closingTimestamp);
       // Nonce (using current timestamp)
-      //const nonce = BigInt(Math.floor(Date.now() / 1000))
-      const nonce = 0;
+      const nonce = BigInt(Math.floor(Date.now() / 1000))
+
 
       console.log('Asking question on Realitio...', {
         templateId,
         question,
-        arbitrator,
+        ARBITRATOR,
         timeout,
         closingTimestamp,
         nonce
       })
-      console.log('before ask question');
-      // askQuestion returns the questionId directly
+
+
       const questionId = await askQuestion(
         templateId,
         question,
-        arbitrator,
+        ARBITRATOR,
         timeout,
         closingTimestamp,
         nonce,
-        parseEther('0.1') // Bond amount (0.1 xDai for now)
+        parseEther('0.0') // Bond amount (0.1 xDai for now)
       );
 
       if (!questionId) {
@@ -445,10 +480,8 @@ export default function CreateMarket() {
       // Convert fee percentage to basis points (e.g., 2.0% -> 200)
       const feeBasisPoints = Math.round(parseFloat(formData.feePercentage) * 100)
 
-
       // Get the condition ID first
       const conditionId = await getConditionId(questionId!)
-
 
       const createMarketHash = await writeContract({
         address: FPMM_DETERMINISTIC_FACTORY_ADDRESS,
@@ -457,10 +490,10 @@ export default function CreateMarket() {
         args: [
           saltNonce,
           CONDITIONAL_TOKENS_ADDRESS,
-          ERC20_CRC_GROUP_ADDRESS,
+          formData.circlesGroup.erc20 as `0x${string}`,
           [conditionId],
           BigInt(feeBasisPoints),
-          parseEther(formData.initialFunds),
+          BigInt(0),
           []
         ]
       })
@@ -492,7 +525,7 @@ export default function CreateMarket() {
             throw new Error(`Failed to get receipt after ${maxRetries} attempts: ${err instanceof Error ? err.message : String(err)}`);
           }
           // Wait before retrying
-          await new Promise(resolve => setTimeout(resolve, 10_000));
+          await new Promise(resolve => setTimeout(resolve, 2_000));
         }
       }
 
@@ -500,12 +533,8 @@ export default function CreateMarket() {
         throw new Error('Failed to get transaction receipt after multiple attempts');
       }
 
-      console.log('Transaction receipt received. Status:', receipt.status);
-      console.log('Block number:', receipt.blockNumber);
-      console.log('Transaction index:', receipt.transactionIndex);
 
-      console.log('Market created successfully. Transaction status:', receipt.status)
-      console.log('Transaction receipt:', receipt)
+      console.log('Market created successfully. Transaction status:', receipt);
 
       // Set up event watcher for FixedProductMarketMakerCreation event
       console.log('Setting up event watcher for FixedProductMarketMakerCreation event...');
@@ -525,7 +554,7 @@ export default function CreateMarket() {
           topics: eventLog.topics,
         })
 
-        console.log('Decoded event:', decodedEvent)
+        console.log('Decoded event:', decodedEvent);
 
         // Extract specific values with proper typing
         const {
@@ -534,7 +563,6 @@ export default function CreateMarket() {
           conditionalTokens,
           collateralToken,
           conditionIds,
-          fee
         } = decodedEvent.args
         marketAddress = fixedProductMarketMaker;
         console.log('Market Address:', fixedProductMarketMaker)
@@ -542,7 +570,6 @@ export default function CreateMarket() {
         console.log('Conditional Tokens:', conditionalTokens)
         console.log('Collateral Token:', collateralToken)
         console.log('Condition IDs:', conditionIds)
-        console.log('Fee:', fee)
       }
 
       if (!marketAddress) {
@@ -556,11 +583,10 @@ export default function CreateMarket() {
       const outcomeIndexes: number[] = [];
       const betContractIdentifiers: string[] = [];
       const metadataDigests: `0x${string}`[] = [];
-      // ToDo - get conditionId from market
 
       for (let outcomeIndex = 0; outcomeIndex < formData.outcomes.length; outcomeIndex++) {
         outcomeIndexes.push(outcomeIndex + 1);
-        const betContractIdentifier = prepareBetContractIdentifier(outcomeIndex); 
+        const betContractIdentifier = prepareBetContractIdentifier(outcomeIndex);
         betContractIdentifiers.push(betContractIdentifier);
 
         // Use the first 32 bytes of the questionId as metadata digest
@@ -568,13 +594,6 @@ export default function CreateMarket() {
         metadataDigests.push("0x0000000000000000000000000000000000000000000000000000000000000000" as `0x${string}`);
       }
       const liquidityContractIdentifiers = prepareLiquidityContractIdentifiers();
-      console.log("before creating bet contracts");
-      console.log("fpmm market", getAddress(marketAddress));
-      console.log("circles group", formData.circlesGroup);
-      console.log("condition id", conditionId);
-      console.log("bet contract identifiers", betContractIdentifiers);
-      console.log("metadata digests", metadataDigests);
-      console.log("liquidity contract identifiers", liquidityContractIdentifiers);
 
       // Call createBetContract
       const txHash = await writeContract({
@@ -582,8 +601,8 @@ export default function CreateMarket() {
         abi: BET_CONTRACT_FACTORY_ABI,
         functionName: 'createContractsForFpmm',
         args: [
-          getAddress(marketAddress), // fpmmAddress
-          getAddress(formData.circlesGroup), // groupCRCToken (using circles group address)
+          getAddress(marketAddress),
+          getAddress(formData.circlesGroup.address),
           outcomeIndexes,
           [conditionId],
           betContractIdentifiers,
@@ -627,14 +646,11 @@ export default function CreateMarket() {
         creator: address || '',
         fixedProductMarketMaker: marketAddress,
         conditionalTokens: CONDITIONAL_TOKENS_ADDRESS,
-        collateralToken: ERC20_CRC_GROUP_ADDRESS,
+        collateralToken: formData.circlesGroup.erc20,
         conditionIds: [conditionId],
         fee: feeBasisPoints.toString(),
         betContractAddresses: betContractAddresses
-      })
-
-      // Redirect to the market page with the questionId
-      //router.push(`/market/${questionId}`)
+      });
 
 
     } catch (err) {
@@ -793,25 +809,6 @@ export default function CreateMarket() {
               </select>
             </div>
 
-            <div>
-              <label htmlFor="initialFunds" className="block text-sm font-medium text-gray-700 mb-1">
-                Amount of CRC Tokens
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  id="initialFunds"
-                  min="0"
-                  step="1"
-                  value={formData.initialFunds}
-                  name="initialFunds"
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="0"
-                  required
-                />
-              </div>
-            </div>
 
             <div>
               <label htmlFor="feePercentage" className="block text-sm font-medium text-gray-700 mb-1">
@@ -842,13 +839,13 @@ export default function CreateMarket() {
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={formData.outcomes.length < 2 || isSubmitting || isAskingQuestion || isSwitching}
+              disabled={formData.outcomes.length < 2 || isSubmitting || isSwitching}
               className={`px-6 py-2 text-base font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${formData.outcomes.length < 2
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
                 }`}
             >
-              {isSwitching ? 'Switching Network...' : isSubmitting || isAskingQuestion ? 'Creating Market...' : 'Create Market'}
+              {isSwitching ? 'Switching Network...' : isSubmitting ? 'Creating Market...' : 'Create Market'}
             </button>
           </div>
         </div>

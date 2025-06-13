@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useReadContract } from 'wagmi'
 import { LoadingSpinner } from "@/components/loading-spinner"
-import { BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS } from "@/lib/constants"
+import { ALLOWED_COLLATERAL, BET_CONTRACT_FACTORY_ABI, BET_CONTRACT_FACTORY_ADDRESS, ERC20_CRC_METRI_CORE_GROUP_ADDRESS, FPMM_ABI } from "@/lib/constants"
 import { usePublicClient } from 'wagmi'
 import { WalletConnectButton } from "@/components/wallet-connect-button"
 import { config } from "@/lib/wagmi/config"
@@ -49,17 +49,16 @@ export default function LiquidityPage() {
 
     const fetchAllLiquidityInfo = async () => {
       const updatedMarkets = [...markets];
-      console.log("upded markets", updatedMarkets);
       let hasUpdates = false;
 
       for (let i = 0; i < updatedMarkets.length; i++) {
         const market = updatedMarkets[i];
-        console.log("market", market.fpmmAddress as `0x${string}`);
         
         // Skip if we already have liquidity info for this market
         if (market.liquidityInfo) continue;
 
         try {
+          
           console.log("fetching");
           const result = await publicClient.readContract({
             address: BET_CONTRACT_FACTORY_ADDRESS,
@@ -100,23 +99,43 @@ export default function LiquidityPage() {
       }
 
       if (!isReading && marketAddresses) {
-        // Type assertion since we know the return type from the ABI
-        const addresses = marketAddresses as string[]
+        try {
+          // Type assertion since we know the return type from the ABI
+          const addresses = marketAddresses as string[]
+          const filteredMarkets: ProcessedMarket[] = [];
 
-        // Convert the addresses to the expected format
-        const processedMarkets = addresses.map((address) => {
-          //let liq = await fetchLiquidityInfo(address);
-          //console.log('liquidityInfo', liq);
-          return {
-            fpmmAddress: address,
-            groupCRCToken: '' // This would need to be fetched separately if needed
+          // Process each market to check collateral token
+          for (const address of addresses) {
+            try {
+              // Check the collateral token for this market
+              const marketCollateral = await publicClient.readContract({
+                address: address as `0x${string}`,
+                abi: FPMM_ABI,
+                functionName: 'collateralToken',
+                args: [],
+              });
+              
+              // Only include markets with the correct collateral token
+              if (marketCollateral === ALLOWED_COLLATERAL) {
+                filteredMarkets.push({
+                  fpmmAddress: address,
+                  groupCRCToken: '' // This would need to be fetched separately if needed
+                });
+              }
+            } catch (err) {
+              console.error(`Error checking collateral for market ${address}:`, err);
+              // Continue with other markets if one fails
+            }
           }
-        });
-
-        setMarkets(processedMarkets)
-        setIsLoading(false)
 
 
+          setMarkets(filteredMarkets);
+        } catch (err) {
+          console.error("Error processing markets:", err);
+          setError("Failed to process market data");
+        } finally {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -144,15 +163,22 @@ export default function LiquidityPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-medium text-lg">Market #{index + 1}</h3>
-                    <p className="text-sm text-gray-500 mt-1 break-all">FPMM Address: {market.fpmmAddress}</p>
+                    <div className="mt-1">
+                      <p className="text-sm text-gray-500">FPMM Address:</p>
+                      <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
+                        {market.fpmmAddress}
+                        <CopyButton value={market.fpmmAddress} className="h-3.5 w-3.5 flex-shrink-0" />
+                      </div>
+                    </div>
                     {market.groupCRCToken && (
-                      <p className="text-sm text-gray-500 mt-1 break-all">Group CRC Token: {market.groupCRCToken}</p>
+                      <div className="mt-1">
+                        <p className="text-sm text-gray-500">Group CRC Token:</p>
+                        <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
+                          {market.groupCRCToken}
+                          <CopyButton value={market.groupCRCToken} className="h-3.5 w-3.5 flex-shrink-0" />
+                        </div>
+                      </div>
                     )}
-                  </div>
-                  <div className="text-right">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mb-2">
-                      Processed
-                    </span>
                   </div>
                 </div>
                 {market.liquidityInfo ? (
@@ -160,10 +186,10 @@ export default function LiquidityPage() {
                     <Card>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium">Add Liquidity</CardTitle>
-                        <CardDescription className="text-xs">
-                          <div className="flex items-center gap-1 truncate">
+                        <CardDescription>
+                          <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
                             {market.liquidityInfo.liquidityAdder}
-                            <CopyButton value={market.liquidityInfo.liquidityAdder} className="h-4 w-4" />
+                            <CopyButton value={market.liquidityInfo.liquidityAdder} className="h-3.5 w-3.5 flex-shrink-0" />
                           </div>
                         </CardDescription>
                       </CardHeader>
@@ -174,10 +200,10 @@ export default function LiquidityPage() {
                     <Card>
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-medium">Remove Liquidity</CardTitle>
-                        <CardDescription className="text-xs">
-                          <div className="flex items-center gap-1 truncate">
+                        <CardDescription>
+                          <div className="flex items-center gap-1 bg-gray-100 p-2 rounded text-xs break-all font-mono">
                             {market.liquidityInfo.liquidityRemover}
-                            <CopyButton value={market.liquidityInfo.liquidityRemover} className="h-4 w-4" />
+                            <CopyButton value={market.liquidityInfo.liquidityRemover} className="h-3.5 w-3.5 flex-shrink-0" />
                           </div>
                         </CardDescription>
                       </CardHeader>
