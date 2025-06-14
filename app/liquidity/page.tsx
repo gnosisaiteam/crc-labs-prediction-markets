@@ -22,16 +22,6 @@ interface LiquidityInfo {
   liquidityRemover: string
 }
 
-interface FPMMGraphData {
-  id: string;
-  collateralToken: string;
-  outcomes: string[];
-  title: string;
-  liquidityMeasure: string;
-  currentAnswer: string;
-  answerFinalizedTimestamp: string;
-  resolutionTimestamp: string;
-}
 
 interface ProcessedMarket {
   id: string
@@ -131,6 +121,7 @@ export default function LiquidityPage() {
                   id_in: [${marketAddresses.map((address: string) => `"${address.toLowerCase()}"`).join(",")}]
                 }) {
                   id
+                  title
                   collateralToken
                   openingTimestamp
                   liquidityMeasure
@@ -240,24 +231,24 @@ export default function LiquidityPage() {
               <div key={index} className="border rounded-lg p-4 hover:bg-gray-50">
                 <div className="flex justify-between items-start">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-lg">{market.title}</h3>
-                    </div>
-
+                   
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
                         <p className="text-sm font-medium text-gray-600">Liquidity</p>
                         <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg text-sm font-mono">
                           {parseFloat(formatEther(BigInt(market.liquidityMeasure))).toFixed(2)}
-
                         </div>
                       </div>
                       <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-600">Market Title</p>
+                        <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg text-sm font-mono">
+                          {market.title}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        
                         <p className="text-sm font-medium text-gray-600">Status</p>
                         {(() => {
-                          const now = Math.floor(Date.now() / 1000);
-                          const answerFinalized = market.answerFinalizedTimestamp ? Number(market.answerFinalizedTimestamp) : null;
-                          const resolution = market.resolutionTimestamp ? Number(market.resolutionTimestamp) : null;
 
                           if (!market.resolutionTimestamp && !market.answerFinalizedTimestamp) {
                             return (
@@ -281,12 +272,15 @@ export default function LiquidityPage() {
                             )
                           }
                         })()}
+                        
                       </div>
-                      <div className="col-span-2 space-y-2">
+                      <div className="col-span-1 space-y-2">
                         <p className="text-sm font-medium text-gray-600">FPMM Address</p>
-                        <div className="flex items-center gap-2 bg-gray-100 p-3 rounded-lg text-sm font-mono">
-                          <span className="break-all">{market.id}</span>
-                          <CopyButton value={market.id} className="h-4 w-4 flex-shrink-0" />
+                        <div className="flex items-center gap-4">
+                          <div className="flex-1 flex items-center gap-2 bg-gray-100 p-3 rounded-lg text-sm font-mono">
+                            <span className="break-all">{market.id}</span>
+                            <CopyButton value={market.id} className="h-4 w-4 flex-shrink-0" />
+                          </div>
                         </div>
                       </div>
                     </div>
