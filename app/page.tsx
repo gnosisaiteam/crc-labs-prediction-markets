@@ -52,6 +52,8 @@ export default function Home() {
               id_in: [${addresses.map(addr => `"${addr.toLowerCase()}"`).join(",")}],
               collateralToken: "${ALLOWED_COLLATERAL.toLowerCase()}",
               liquidityMeasure_gt: 0,
+              resolutionTimestamp: null,
+              answerFinalizedTimestamp: null
               }) {
                 id
                 outcomes
