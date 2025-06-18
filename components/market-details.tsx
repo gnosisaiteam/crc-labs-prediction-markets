@@ -227,7 +227,7 @@ export function MarketDetails({ marketInfo, marketData }: MarketDetailsProps) {
                 >
                   Place bet on outcome {marketData?.outcomes[index]}
                 </a>
-                <QRCode value={contract} size={180} />
+                <QRCode value={`https://app.metri.xyz/transfer/${contract}/crc`} size={180} />
                 <span className="font-mono text-xs mt-3 break-all text-center">{contract}</span>
                 <div className="mt-2 w-full">
                   <h4 className="text-sm font-medium text-gray-600 mt-2">Bettors:</h4>
